@@ -139,12 +139,43 @@ class DataPipeline:
     # ------------------------------------------------------------------
 
     def _fetch(self) -> pd.DataFrame:
-        """Download SOXX, VIX, DGS10 and return aligned raw DataFrame."""
+        """Load SOXX, VIX, DGS10 from data/ if present, else download live."""
+        from pathlib import Path
+
+        data_dir = Path(__file__).parent.parent / "data"
+        soxx_path = data_dir / "soxx.csv"
+        vix_path = data_dir / "vix.csv"
+        dgs10_path = data_dir / "dgs10.csv"
+
+        if soxx_path.exists() and vix_path.exists() and dgs10_path.exists():
+            return self._fetch_from_files(soxx_path, vix_path, dgs10_path)
+        return self._fetch_from_network()
+
+    def _fetch_from_files(self, soxx_path, vix_path, dgs10_path) -> pd.DataFrame:
+        """Read pre-downloaded CSVs from data/."""
+        print("[DataPipeline] Loading data from local files...")
+        soxx = pd.read_csv(soxx_path, index_col=0, parse_dates=True)
+        soxx.columns = soxx.columns.str.lower()
+        soxx = soxx[["close", "volume"]].dropna()
+
+        vix_raw = pd.read_csv(vix_path, index_col=0, parse_dates=True)
+        vix_raw.columns = vix_raw.columns.str.lower()
+        vix = vix_raw["close"].reindex(soxx.index)
+
+        dgs10_raw = pd.read_csv(dgs10_path, index_col=0, parse_dates=True, na_values=".")
+        dgs10_col = dgs10_raw.columns[0]
+        dgs10 = dgs10_raw[dgs10_col].reindex(soxx.index)
+        dgs10 = forward_fill_dgs10(dgs10, max_fill=3)
+
+        return self._assemble_raw(soxx, vix, dgs10)
+
+    def _fetch_from_network(self) -> pd.DataFrame:
+        """Download SOXX, VIX, ^TNX live via yfinance."""
         import yfinance as yf
-        import pandas_datareader as pdr
 
         cfg = self.config
         start, end = cfg.train_start, cfg.test_end
+        print("[DataPipeline] Downloading data from network...")
 
         soxx = yf.download(cfg.equity_ticker, start=start, end=end, progress=False)
         soxx.columns = soxx.columns.get_level_values(0).str.lower()
@@ -154,10 +185,16 @@ class DataPipeline:
         vix_raw.columns = vix_raw.columns.get_level_values(0).str.lower()
         vix = vix_raw["close"].reindex(soxx.index)
 
-        dgs10_raw = pdr.get_data_fred(cfg.bond_series, start=start, end=end)
-        dgs10 = dgs10_raw[cfg.bond_series].reindex(soxx.index)
+        # ^TNX: 10-yr Treasury yield, same units as FRED DGS10
+        tnx_raw = yf.download("^TNX", start=start, end=end, progress=False)
+        tnx_raw.columns = tnx_raw.columns.get_level_values(0).str.lower()
+        dgs10 = tnx_raw["close"].reindex(soxx.index)
         dgs10 = forward_fill_dgs10(dgs10, max_fill=3)
 
+        return self._assemble_raw(soxx, vix, dgs10)
+
+    def _assemble_raw(self, soxx, vix, dgs10) -> pd.DataFrame:
+        """Combine aligned series into raw_df and assert no NaN."""
         missing_vix = int(vix.isna().sum())
         missing_dgs10 = int(dgs10.isna().sum())
         print(f"[DataPipeline] Missing VIX rows after alignment: {missing_vix}")
