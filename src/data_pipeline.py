@@ -177,6 +177,8 @@ class DataPipeline:
         cfg = self.config
 
         features = compute_features(raw_df)
+        self.raw_df = raw_df
+        self.features_df = features
         scaled, self.scaler = fit_and_apply_scaler(features, cfg.train_end)
         scaled = scaled.dropna()
 
