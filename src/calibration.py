@@ -20,3 +20,30 @@ Public interface:
     cal.score(z: ndarray[16]) -> float
     cal.threshold -> float
 """
+import numpy as np
+from sklearn.covariance import LedoitWolf
+
+
+class MahalanobisCalibrator:
+    def __init__(self) -> None:
+        self.mean_: np.ndarray | None = None
+        self.precision_matrix_: np.ndarray | None = None
+        self.threshold: float | None = None
+
+    def fit(self, z_fit: np.ndarray) -> None:
+        lw = LedoitWolf()
+        lw.fit(z_fit)
+        self.mean_ = lw.location_
+        self.precision_matrix_ = lw.get_precision()
+
+    def score(self, z: np.ndarray) -> float:
+        if self.mean_ is None:
+            raise RuntimeError("Call fit() before score()")
+        diff = z - self.mean_
+        return float(np.sqrt(diff @ self.precision_matrix_ @ diff))
+
+    def set_threshold(self, z_calib: np.ndarray, percentile: int = 99) -> None:
+        if self.mean_ is None:
+            raise RuntimeError("Call fit() before set_threshold()")
+        scores = np.array([self.score(z_calib[i]) for i in range(len(z_calib))])
+        self.threshold = float(np.percentile(scores, percentile))
