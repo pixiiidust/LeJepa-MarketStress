@@ -253,3 +253,41 @@ A good test exercises external behavior through the module's public interface an
 - **POC-2 scope.** After the blind result is reviewed: seed stability sweep (8–10 seeds), threshold sensitivity (99th vs 99.5th), latent dim sensitivity (8, 16, 32), and additional baseline signals (PCA, Isolation Forest, correlated ETFs).
 
 - **Final claim standard.** The script must not claim LeJEPA predicts crashes. The console summary pass/fail verdict should read: "This POC tests whether LeJEPA latent drift can function as an unsupervised early warning signal for market regime stress, and whether it beats simple volatility and VIX baselines in a leakage-controlled historical backtest."
+
+---
+
+## POC-1 Results
+
+**Verdict: FAIL** (criteria C1 and C2 failed; C3 and C4 passed)
+
+### Blind result
+
+| Signal   | First breach | Lead (trading days) |
+|----------|-------------|---------------------|
+| LeJEPA   | 2022-11-04  | −227 (late)         |
+| RV20     | N/A         | —                   |
+| VIX      | N/A         | —                   |
+
+Crash onset: 2021-12-10. LeJEPA fired 227 trading days *after* crash onset. Neither baseline fired at all.
+
+### Root cause: COVID-contaminated calibration thresholds
+
+The 2019–2020 calibration window includes the COVID crash (Feb–Apr 2020), which drove the 99th-percentile thresholds to levels only reachable during a COVID-scale shock:
+
+| Signal | Threshold | Test-period max | % of threshold reached |
+|--------|-----------|-----------------|------------------------|
+| LeJEPA | 6.33      | 5.81            | 91.7%                  |
+| RV20   | 12.07     | 4.43            | 36.7%                  |
+| VIX    | 8.21      | 3.30            | 40.1%                  |
+
+LeJEPA reached 91.7% of its threshold — the signal was present but the bar was set by COVID-scale volatility. LeJEPA scores at crash onset (2021-12-10) were ~1.7, showing no early warning even under a lower threshold.
+
+### Key diagnostic finding
+
+Excluding only the acute crash window (Feb–Apr 2020) does not fix the problem: the LeJEPA threshold barely moves (6.33 → 6.43), indicating the COVID-adjacent volatility regime outside the acute crash dominated the calibration tail. Pre-COVID calibration (end Jan 2020) drops the LeJEPA threshold to 3.74 and produces a 223-day early warning, but the VIX threshold degenerates to 0.77 (a 556% LeJEPA overshoot), making that scenario diagnostically invalid.
+
+The root cause is the calibration window design, not the model or the percentile choice. A calibration window that includes any COVID-era regime inflation will produce thresholds unreachable in a normal-stress environment.
+
+### Implication for POC-2
+
+POC-2 tests whether a regime-filtered calibration window — one that excludes extreme-volatility days using training-period statistics — produces thresholds that allow LeJEPA (and the baselines) to fire during the 2022 drawdown at a defensible false-alert rate. See `docs/PRD-POC2.md`.

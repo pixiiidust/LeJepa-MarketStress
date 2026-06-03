@@ -19,9 +19,29 @@ Public interface:
     cal.set_threshold(z_calib: ndarray[N, 16], percentile=99)
     cal.score(z: ndarray[16]) -> float
     cal.threshold -> float
+
+    regime_filter_mask(dates, rv20_series, rv20_mean, rv20_std, pct_threshold) -> ndarray[bool]
 """
 import numpy as np
+import pandas as pd
 from sklearn.covariance import LedoitWolf
+
+
+def regime_filter_mask(
+    dates: pd.DatetimeIndex,
+    rv20_series: pd.Series,
+    rv20_mean: float,
+    rv20_std: float,
+    pct_threshold: float,
+) -> np.ndarray:
+    """Return a boolean mask (True = keep) for days where RV20 z-score <= pct_threshold.
+
+    Reindexes rv20_series to dates before computing z-scores, so gaps become NaN.
+    NaN z-scores are treated as exceeding the threshold (excluded).
+    Safe to apply to either window-date indices or raw trading-day indices.
+    """
+    zscores = (rv20_series.reindex(dates) - rv20_mean) / rv20_std
+    return (zscores <= pct_threshold).values
 
 
 class MahalanobisCalibrator:
