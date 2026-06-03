@@ -6,12 +6,13 @@ Tests whether a small [Linear Joint-Embedding Predictive Architecture](https://g
 
 ## Results
 
-| POC | Verdict | Root cause |
-|-----|---------|------------|
-| POC-1 | **FAIL** | COVID-era calibration inflated thresholds to unreachable levels |
-| POC-2 | In progress | Regime-filtered calibration (exclude RV20 z-score > 95th pct of training) |
+| POC | Verdict | Finding |
+|-----|---------|---------|
+| POC-1 | **FAIL** | COVID-era calibration inflated threshold to 6.33; LeJEPA breached 227 days late; neither baseline fired |
+| POC-2 | **FAIL** | Regime-filtered calibration lowered threshold to 4.29 (−32%) but breach still 18 days after crash onset |
+| POC-3 | In progress | Sensitivity sweep: seed stability (10 seeds), latent dim {8/16/32}, PCA + Isolation Forest baselines |
 
-POC-1 blind result: LeJEPA reached 91.7% of threshold, breached 227 days late. Neither baseline fired. See `docs/PRD.md` for full diagnostics.
+Both FAIL verdicts are locked. POC-3 contextualises them — see `docs/PRD-POC3.md`.
 
 ## Experiment Design
 
@@ -32,9 +33,14 @@ POC-1 blind result: LeJEPA reached 91.7% of threshold, breached 227 days late. N
 
 ```bash
 pip install -r requirements.txt
-python run_lejepa_soxx_poc.py   # POC-1 (result locked)
-python run_lejepa_soxx_poc2.py  # POC-2 (regime-filtered calibration)
+python run_lejepa_soxx_poc.py    # POC-1 (result locked — do not re-run)
+python run_lejepa_soxx_poc2.py   # POC-2 (regime-filtered calibration)
+python run_poc3_seed_sweep.py    # POC-3 seed stability sweep (10 seeds)
+python run_poc3_latent_sweep.py  # POC-3 latent dim sweep {8, 16, 32}
+python run_poc3_baselines.py     # POC-3 extended baselines (PCA, Isolation Forest)
 ```
+
+POC-3 entry points write only to `outputs/poc3/`.
 
 ## Model
 
@@ -52,9 +58,12 @@ Context window: 30 trading days → 10-day future target.
 
 ```
 src/                    module implementations
-tests/                  unit tests
-docs/PRD.md             POC-1 spec + results
-docs/PRD-POC2.md        POC-2 spec
-diagnostics.py          post-hoc sensitivity analysis
+tests/                  unit tests (116 passing)
+docs/PRD.md             POC-1 preregistered spec + results
+docs/PRD-POC2.md        POC-2 spec + results
+docs/PRD-POC3.md        POC-3 sensitivity experiment spec
+docs/HANDOFF.md         session handoff state
+diagnostics.py          post-hoc sensitivity analysis (8 scenarios)
 outputs/                generated artifacts (gitignored except .gitkeep)
+outputs/poc3/           POC-3 results (seed sweep, latent dim, baselines)
 ```
