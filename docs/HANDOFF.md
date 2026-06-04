@@ -2,9 +2,9 @@
 
 ## State
 
-POC-1 and POC-2 complete (both FAIL). 162/162 tests passing on `main`. PRD written at `docs/PRD-POC3.md`. Issue #20 closed this session; two issues remain open.
+POC-1 and POC-2 complete (both FAIL). 185/185 tests passing on `main`. PRD written at `docs/PRD-POC3.md`. Issue #21 closed this session; one issue remains open.
 
-**Next session target: issue #21** — PCA and Isolation Forest anomaly scorers (unblocked, independent of any other open issue).
+**Next session target: issue #22** — Extended baselines entry point (all five signals). Now unblocked: #21 (`PCAScorer` / `IsolationForestScorer`) is complete.
 
 ---
 
@@ -12,18 +12,17 @@ POC-1 and POC-2 complete (both FAIL). 162/162 tests passing on `main`. PRD writt
 
 | # | Title | Blocked by | Status |
 |---|-------|------------|--------|
-| [#21](https://github.com/pixiiidust/LeJepa-MarketStress/issues/21) | PCA and Isolation Forest anomaly scorers | — | open |
-| [#22](https://github.com/pixiiidust/LeJepa-MarketStress/issues/22) | Extended baselines entry point (all five signals) | #21 | open |
+| [#22](https://github.com/pixiiidust/LeJepa-MarketStress/issues/22) | Extended baselines entry point (all five signals) | — | open |
 
 ---
 
-## What Changed This Session (issue #20)
+## What Changed This Session (issue #21)
 
-**Commit:** `6ae38f5` — `feat(#20): latent dim sweep runner for dims 8, 16, 32 (seed=42)`
+**Commit:** `32a3eb8` — `feat(#21): PCA and Isolation Forest anomaly scorers`
 
-- `run_poc3_latent_sweep.py`: full POC-1 pipeline per latent dim variant (8, 16, 32). Data loaded once via `DataPipeline`; each dim independently trains a fresh `LeJEPAModel` with `Config(latent_dim=d, encoder_dims=(180,64,d), predictor_dims=(d,2*d,d))`, seed fixed at 42. Calibration, scoring, and evaluation follow the same pattern as `run_poc3_seed_sweep.py`. Warns if `latent_std_min < 0.05`. Writes `outputs/poc3/latent_dim_results.csv`; appends one-line summary to `outputs/poc3/poc3_summary.md`. No writes outside `outputs/poc3/`.
-- `tests/test_poc3_latent_sweep.py`: 20 tests across 5 cycles — `_compute_latent_std_min`, `_build_dim_row`, `_print_console_summary`, `_append_poc3_summary`, and `run_latent_sweep` integration (all heavy deps monkeypatched).
-- Test count: 142 → 162, all passing.
+- `src/poc3_baselines.py`: `PCAScorer` and `IsolationForestScorer`. Both flatten each window's `context_array` (30×6 → 180-dim), standardise with `RobustScaler` fitted on train windows. `PCAScorer` selects k components at cumulative explained variance ≥ 95%; anomaly score = L2 reconstruction residual. `IsolationForestScorer` uses `IsolationForest(n_estimators=200, random_state=42)`; anomaly score = `−score_samples(X)`. Both set threshold = p99 of calibration scores via `fit_calibration()`, and produce episode IDs via `detect_episodes`. Shared helpers `_flatten()` and `_dates()` keep the two classes symmetric.
+- `tests/test_poc3_baselines.py`: 23 tests across 10 cycles — output columns, breach logic, OOD detection, p99 threshold, `fit_calibration` returns self, episode ID identity, idempotence — for both scorers.
+- Test count: 162 → 185, all passing.
 
 ---
 
@@ -60,6 +59,7 @@ run_lejepa_soxx_poc.py       POC-1 entry point (LOCKED — do not re-run)
 run_lejepa_soxx_poc2.py      POC-2 entry point
 run_poc3_seed_sweep.py       POC-3 seed sweep (issue #19, done)
 run_poc3_latent_sweep.py     POC-3 latent dim sweep (issue #20, done)
+run_poc3_baselines.py        (to be created in #22) extended baselines entry point
 diagnostics.py               8-scenario post-hoc sensitivity analysis
 
 src/
@@ -73,16 +73,16 @@ src/
   scoring.py                 Scorer — Mahalanobis distance, episodes (latent cols config-driven)
   evaluation.py              Evaluator — crash oracle, 4-criterion verdict
   output.py                  OutputWriter — CSV, chart, JSON
-  poc3_baselines.py          (to be created in #21) PCAScorer, IsolationForestScorer
+  poc3_baselines.py          PCAScorer, IsolationForestScorer (issue #21, done)
 
-tests/                       162 tests total, all passing
+tests/                       185 tests total, all passing
   test_types.py
   test_utils.py
   test_data_pipeline.py
-  test_model.py              dim-8 and dim-32 shape tests added (#18)
+  test_model.py
   test_calibration.py
   test_baselines.py
-  test_scoring.py            latent column count tests added (#18)
+  test_scoring.py
   test_evaluation.py
   test_output.py
   test_main.py
@@ -90,7 +90,7 @@ tests/                       162 tests total, all passing
   test_diagnostics_scenarios.py
   test_poc3_seed_sweep.py    20 tests for seed sweep runner (issue #19)
   test_poc3_latent_sweep.py  20 tests for latent dim sweep runner (issue #20)
-  test_poc3_baselines.py     (to be created in #21)
+  test_poc3_baselines.py     23 tests for PCAScorer / IsolationForestScorer (issue #21)
   test_poc3_entry.py         (to be created in #22)
 
 docs/
@@ -110,36 +110,32 @@ outputs/                     (mostly untracked)
 
 ---
 
-## Issue #21 Sketch (PCA and Isolation Forest Anomaly Scorers)
+## Issue #22 Sketch (Extended Baselines Entry Point)
 
-Create `src/poc3_baselines.py` with two classes: `PCAScorer` and `IsolationForestScorer`. Both follow the same fit/calibrate/score interface as `src/baselines.py:BaselineScorer`, but accept `list[Window]` (not DataFrames) and operate on flattened 180-dim context arrays.
+Create `run_poc3_baselines.py` that trains one model (seed=42, latent_dim=16) and evaluates all five signals — LeJEPA, RV20 z-score, VIX z-score, PCA reconstruction error, Isolation Forest — against the 2021–2022 test period using the same four pass/fail criteria as POC-1.
 
-**Input preparation** (shared by both scorers):
-- Flatten each window's `context_array` (shape 30×6) to 180-dim vector.
-- Standardise using a `RobustScaler` fitted on the training windows (same leakage discipline as the data pipeline).
+**Pipeline** (follow `run_poc3_seed_sweep.py` as structural template):
+1. Load data via `DataPipeline`; build `WindowDataset`.
+2. Train `LeJEPAModel` with `Trainer` (seed=42).
+3. Calibrate `MahalanobisCalibrator` → LeJEPA scores via `Scorer`.
+4. Fit and calibrate `BaselineScorer` → RV20 + VIX scores.
+5. Fit and calibrate `PCAScorer` → PCA scores.
+6. Fit and calibrate `IsolationForestScorer` → IF scores.
+7. Evaluate each signal independently against crash oracle via `Evaluator`.
+8. Write outputs to `outputs/poc3/`.
 
-**PCAScorer**:
-- Constructor: `PCAScorer(train_windows: list[Window], config: Config)`
-- Fits `sklearn.decomposition.PCA` on training vectors; selects smallest k where cumulative explained variance ≥ 95%.
-- `fit_calibration(calib_windows) → PCAScorer`: sets `pca_threshold` = p99 of calibration reconstruction L2 errors.
-- `score(windows) → pd.DataFrame`: columns `pca_score`, `pca_threshold`, `pca_breach`, `pca_episode_id`. Episode detection uses `config.episode_cooldown_days` (same as all signals).
+**Outputs** (all inside `outputs/poc3/`):
+- `baselines_results.csv` — 5 rows, one per signal: `signal_name`, `first_breach`, `lead_days`, `episodes_2021`, `alert_days_2021`, `all_pass`
+- `baselines_chart.png` — two-panel: SOXX close (top), all five score series with thresholds and crash onset line (bottom)
+- One-line result appended to `poc3_summary.md`
 
-**IsolationForestScorer**:
-- Constructor: `IsolationForestScorer(train_windows: list[Window], config: Config)`
-- Fits `IsolationForest(n_estimators=200, random_state=42)` on training vectors.
-- Anomaly score = `−score_samples(X)` (negated so higher = more anomalous, directionally consistent).
-- `fit_calibration(calib_windows) → IsolationForestScorer`: sets `if_threshold` = p99 of calibration scores.
-- `score(windows) → pd.DataFrame`: columns `if_score`, `if_threshold`, `if_breach`, `if_episode_id`.
+**Test file**: `tests/test_poc3_entry.py`. Key tests to target:
+- `_build_signal_row(name, verdict)` returns dict with required keys
+- `_print_console_summary(rows)` prints a readable five-signal table
+- `_append_poc3_summary(outdir, rows)` appends a line containing `"baselines"` to `poc3_summary.md`
+- `run_baselines(outdir)` integration test (all heavy deps monkeypatched): returns DataFrame with 5 rows, writes `baselines_results.csv`, writes `baselines_chart.png`, appends to `poc3_summary.md`
 
-**Test file**: `tests/test_poc3_baselines.py`. Key tests to target:
-- `PCAScorer.score()` returns columns `pca_score`, `pca_threshold`, `pca_breach`, `pca_episode_id`.
-- `pca_breach` is True when `pca_score > pca_threshold`.
-- Reconstruction error near-zero for in-distribution windows, non-trivially positive for out-of-distribution windows.
-- `fit_calibration()` sets threshold = p99 of calibration errors.
-- `IsolationForestScorer.score()` returns columns `if_score`, `if_threshold`, `if_breach`, `if_episode_id`.
-- Out-of-distribution window scores above threshold from clean calibration set.
-
-Pattern to follow: `src/baselines.py` for scorer structure; `tests/test_baselines.py` for test style; `tests/test_poc3_seed_sweep.py` for how to use synthetic `list[Window]` data.
+Pattern to follow: `run_poc3_seed_sweep.py` for structure; `tests/test_poc3_seed_sweep.py` for monkeypatching style; `src/poc3_baselines.py` for how to call `PCAScorer` / `IsolationForestScorer`.
 
 ---
 
@@ -161,5 +157,5 @@ For each issue: run `/tdd` to implement with red-green-refactor, then push, clos
 
 ## Suggested Skills
 
-- `/tdd` — implement the next issue with red-green-refactor (start with red tests, then green, then refactor)
+- `/tdd` — implement issue #22 with red-green-refactor (start with red tests, then green, then refactor)
 - `/handoff` with args: `save to docs/HANDOFF.md, target next session for the next open issue with no open blockers`
