@@ -95,7 +95,7 @@ class Scorer:
                     "pred_error_valid_date": pred_error_valid_date,
                     "lejepa_breach": lejepa_breach,
                 }
-                for j in range(16):
+                for j in range(z_pred_np.shape[0]):
                     row[f"z_pred_{j}"] = float(z_pred_np[j])
                     row[f"z_context_{j}"] = float(z_ctx_np[j])
 

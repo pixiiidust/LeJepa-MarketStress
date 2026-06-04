@@ -61,6 +61,38 @@ def test_predict_output_shape():
     assert z_pred.shape == (8, 16)
 
 
+def test_encode_output_shape_dim8():
+    seed_all()
+    cfg = Config(latent_dim=8, encoder_dims=(180, 64, 8), predictor_dims=(8, 16, 8))
+    model = LeJEPAModel(cfg)
+    x = torch.randn(4, 180)
+    assert model.encode(x).shape == (4, 8)
+
+
+def test_predict_output_shape_dim8():
+    seed_all()
+    cfg = Config(latent_dim=8, encoder_dims=(180, 64, 8), predictor_dims=(8, 16, 8))
+    model = LeJEPAModel(cfg)
+    z = torch.randn(4, 8)
+    assert model.predict(z).shape == (4, 8)
+
+
+def test_encode_output_shape_dim32():
+    seed_all()
+    cfg = Config(latent_dim=32, encoder_dims=(180, 64, 32), predictor_dims=(32, 64, 32))
+    model = LeJEPAModel(cfg)
+    x = torch.randn(4, 180)
+    assert model.encode(x).shape == (4, 32)
+
+
+def test_predict_output_shape_dim32():
+    seed_all()
+    cfg = Config(latent_dim=32, encoder_dims=(180, 64, 32), predictor_dims=(32, 64, 32))
+    model = LeJEPAModel(cfg)
+    z = torch.randn(4, 32)
+    assert model.predict(z).shape == (4, 32)
+
+
 # --- SIGRegLoss ---
 
 def test_sigreg_nonnegative_scalar():

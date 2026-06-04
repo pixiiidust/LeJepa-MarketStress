@@ -176,6 +176,41 @@ def test_episode_id_increments_across_multi_episode_sequence():
 
 
 # ---------------------------------------------------------------------------
+# Tests for latent column count driven by model dim (#18)
+# ---------------------------------------------------------------------------
+
+def _mock_model_dim(latent: int) -> MagicMock:
+    model = MagicMock()
+    model.encode.return_value = torch.zeros(latent, dtype=torch.float32)
+    model.predict.return_value = torch.zeros(latent, dtype=torch.float32)
+    return model
+
+
+def _run_dim(latent: int, n: int = 5) -> pd.DataFrame:
+    scorer = Scorer(
+        model=_mock_model_dim(latent),
+        target_cal=_mock_target_cal([_LOW] * n),
+        context_cal=_mock_context_cal(n),
+        trading_days=_days(n),
+    )
+    return scorer.score([_make_window() for _ in range(n)])
+
+
+def test_scorer_dim8_no_spurious_columns():
+    df = _run_dim(8)
+    assert all(f"z_pred_{j}" in df.columns for j in range(8))
+    assert "z_pred_8" not in df.columns
+
+
+def test_scorer_latent_columns_driven_by_model_dim():
+    df = _run_dim(8)
+    assert all(f"z_pred_{j}" in df.columns for j in range(8))
+    assert all(f"z_context_{j}" in df.columns for j in range(8))
+    assert all(f"z_pred_{j}" not in df.columns for j in range(8, 16))
+    assert all(f"z_context_{j}" not in df.columns for j in range(8, 16))
+
+
+# ---------------------------------------------------------------------------
 # Acceptance criterion — eval mode and no_grad during scoring
 # ---------------------------------------------------------------------------
 
