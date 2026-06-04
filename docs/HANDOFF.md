@@ -2,9 +2,9 @@
 
 ## State
 
-POC-1 and POC-2 complete (both FAIL). 116/116 tests passing on `main`. PRD written at `docs/PRD-POC3.md`. Five issues open and ready for agent work.
+POC-1 and POC-2 complete (both FAIL). 122/122 tests passing on `main`. PRD written at `docs/PRD-POC3.md`. Issue #18 closed this session; four issues remain open.
 
-**Next session target: issue #18** — the foundation issue that unblocks both sweep runners.
+**Next session target: issue #19** — seed stability sweep runner (unblocked now that #18 is done).
 
 ---
 
@@ -12,13 +12,24 @@ POC-1 and POC-2 complete (both FAIL). 116/116 tests passing on `main`. PRD writt
 
 | # | Title | Blocked by | Status |
 |---|-------|------------|--------|
-| [#18](https://github.com/pixiiidust/LeJepa-MarketStress/issues/18) | Parameterise `LeJEPAModel` from Config + fix `Scorer` latent column count | — | open |
-| [#19](https://github.com/pixiiidust/LeJepa-MarketStress/issues/19) | Seed stability sweep runner | #18 | open |
-| [#20](https://github.com/pixiiidust/LeJepa-MarketStress/issues/20) | Latent dim sweep runner | #18 | open |
+| [#19](https://github.com/pixiiidust/LeJepa-MarketStress/issues/19) | Seed stability sweep runner | — *(#18 closed)* | open |
+| [#20](https://github.com/pixiiidust/LeJepa-MarketStress/issues/20) | Latent dim sweep runner | — *(#18 closed)* | open |
 | [#21](https://github.com/pixiiidust/LeJepa-MarketStress/issues/21) | PCA and Isolation Forest anomaly scorers | — | open |
 | [#22](https://github.com/pixiiidust/LeJepa-MarketStress/issues/22) | Extended baselines entry point (all five signals) | #21 | open |
 
-Parallel starts: #18 and #21 have no blockers and can run simultaneously.
+Parallel starts available: #19, #20, and #21 all have no open blockers.
+
+---
+
+## What Changed This Session (issue #18)
+
+**Commit:** `998876c` — `feat(#18): parameterise LeJEPAModel from Config + fix Scorer latent column count`
+
+- `src/model.py`: `LeJEPAModel.__init__` now builds encoder/predictor `nn.Sequential` from `config.encoder_dims` / `config.predictor_dims` via `_build_mlp()`. No hardcoded sizes remain.
+- `src/scoring.py`: `Scorer.score()` column loop changed from `range(16)` to `range(z_pred_np.shape[0])`.
+- `tests/test_model.py`: 4 new tests for dim-8 and dim-32 encode/predict shapes.
+- `tests/test_scoring.py`: 2 new tests asserting latent column count matches model dim (dim-8 mock has no spurious `z_pred_8..15` columns).
+- Test count: 116 → 122, all passing.
 
 ---
 
@@ -58,24 +69,24 @@ diagnostics.py               8-scenario post-hoc sensitivity analysis
 src/
   types.py                   Config, Window, WindowDataset, Verdict
   data_pipeline.py           DataPipeline — ingestion, scaling, windowing
-  model.py                   LeJEPAModel (encoder + predictor MLPs) ← #18 modifies this
+  model.py                   LeJEPAModel (builds from config.encoder_dims/predictor_dims)
   sigreg.py                  SIGReg collapse-prevention loss
   training.py                Trainer — AdamW, early stopping
   calibration.py             MahalanobisCalibrator, regime_filter_mask
   baselines.py               BaselineScorer (RV20, VIX z-scores)
-  scoring.py                 Scorer — Mahalanobis distance, episodes ← #18 modifies this
+  scoring.py                 Scorer — Mahalanobis distance, episodes (latent cols config-driven)
   evaluation.py              Evaluator — crash oracle, 4-criterion verdict
   output.py                  OutputWriter — CSV, chart, JSON
   poc3_baselines.py          (to be created in #21) PCAScorer, IsolationForestScorer
 
-tests/                       116 tests total, all passing
+tests/                       122 tests total, all passing
   test_types.py
   test_utils.py
   test_data_pipeline.py
-  test_model.py              ← #18 adds dim-8 and dim-32 shape tests
+  test_model.py              dim-8 and dim-32 shape tests added (#18)
   test_calibration.py
   test_baselines.py
-  test_scoring.py            ← #18 adds latent column count tests
+  test_scoring.py            latent column count tests added (#18)
   test_evaluation.py
   test_output.py
   test_main.py
@@ -102,7 +113,7 @@ outputs/                     (mostly untracked)
 
 ## POC-3 Workflow Per Issue
 
-For each issue: run `/tdd` to implement with red-green-refactor, then push, close the issue, then run `/handoff` with args: save to `docs/HANDOFF.md`, target next session for the next open issue.
+For each issue: run `/tdd` to implement with red-green-refactor, then push, close the issue, then run `/handoff` with args: save to `docs/HANDOFF.md`, target next session for the next open issue with no open blockers.
 
 ---
 
@@ -112,3 +123,11 @@ For each issue: run `/tdd` to implement with red-green-refactor, then push, clos
 2. **Split boundaries are hard** — train 2010–2016, calibration 2019–2020, test 2021+; no data from later splits may influence earlier-split fitting
 3. **No tuning against test period** — POC-3 is post-hoc sensitivity analysis; test period was observed in POC-1
 4. **All POC-3 output goes to `outputs/poc3/`** — no other files under `outputs/` may be written by any POC-3 entry point
+5. **Do NOT run any entry point scripts** (run_poc3_*.py, run_lejepa_soxx_poc*.py) — the researcher runs these manually
+
+---
+
+## Suggested Skills
+
+- `/tdd` — implement the next issue with red-green-refactor (start with red tests, then green, then refactor)
+- `/handoff` with args: `save to docs/HANDOFF.md, target next session for the next open issue with no open blockers`
